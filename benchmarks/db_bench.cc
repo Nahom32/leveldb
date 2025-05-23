@@ -576,82 +576,76 @@ class Benchmark {
       bool fresh_db = false;
       int num_threads = FLAGS_threads;
 
-      if (name == Slice("open")) {
-        method = &Benchmark::OpenBench;
-        num_ /= 10000;
-        if (num_ < 1) num_ = 1;
-      } else if (name == Slice("fillseq")) {
-        fresh_db = true;
-        method = &Benchmark::WriteSeq;
-      } else if (name == Slice("fillbatch")) {
-        fresh_db = true;
-        entries_per_batch_ = 1000;
-        method = &Benchmark::WriteSeq;
-      } else if (name == Slice("fillrandom")) {
-        fresh_db = true;
-        method = &Benchmark::WriteRandom;
-      } else if (name == Slice("overwrite")) {
-        fresh_db = false;
-        method = &Benchmark::WriteRandom;
-      } else if (name == Slice("fillsync")) {
-        fresh_db = true;
-        num_ /= 1000;
-        write_options_.sync = true;
-        method = &Benchmark::WriteRandom;
-      } else if (name == Slice("fill100K")) {
-        fresh_db = true;
-        num_ /= 1000;
-        value_size_ = 100 * 1000;
-        method = &Benchmark::WriteRandom;
-      } else if (name == Slice("readseq")) {
-        method = &Benchmark::ReadSequential;
-      } else if (name == Slice("readreverse")) {
-        method = &Benchmark::ReadReverse;
-      } else if (name == Slice("readrandom")) {
-        method = &Benchmark::ReadRandom;
-      } else if (name == Slice("readmissing")) {
-        method = &Benchmark::ReadMissing;
-      } else if (name == Slice("seekrandom")) {
-        method = &Benchmark::SeekRandom;
-      } else if (name == Slice("seekordered")) {
-        method = &Benchmark::SeekOrdered;
-      } else if (name == Slice("readhot")) {
-        method = &Benchmark::ReadHot;
-      } else if (name == Slice("readrandomsmall")) {
-        reads_ /= 1000;
-        method = &Benchmark::ReadRandom;
-      } else if (name == Slice("deleteseq")) {
-        method = &Benchmark::DeleteSeq;
-      } else if (name == Slice("deleterandom")) {
-        method = &Benchmark::DeleteRandom;
-      } else if (name == Slice("readwhilewriting")) {
-        num_threads++;  // Add extra thread for writing
-        method = &Benchmark::ReadWhileWriting;
-      } else if (name == Slice("compact")) {
-        method = &Benchmark::Compact;
-      } else if (name == Slice("crc32c")) {
-        method = &Benchmark::Crc32c;
-      } else if (name == Slice("snappycomp")) {
-        method = &Benchmark::SnappyCompress;
-      } else if (name == Slice("snappyuncomp")) {
-        method = &Benchmark::SnappyUncompress;
-      } else if (name == Slice("zstdcomp")) {
-        method = &Benchmark::ZstdCompress;
-      } else if (name == Slice("zstduncomp")) {
-        method = &Benchmark::ZstdUncompress;
-      } else if (name == Slice("heapprofile")) {
-        HeapProfile();
-      } else if (name == Slice("stats")) {
-        PrintStats("leveldb.stats");
-      } else if (name == Slice("sstables")) {
-        PrintStats("leveldb.sstables");
-      } else {
-        if (!name.empty()) {  // No error message for empty name
-          std::fprintf(stderr, "unknown benchmark '%s'\n",
-                       name.ToString().c_str());
-        }
+      static const std::unordered_map<std::string, std::function<void()>> benchmark_map = {
+        { "open", [&] {
+            method = &Benchmark::OpenBench;
+            num_ /= 10000;
+            if (num_ < 1) num_ = 1;
+          }},
+        { "fillseq", [&] {
+            fresh_db = true;
+            method = &Benchmark::WriteSeq;
+          }},
+        { "fillbatch", [&] {
+            fresh_db = true;
+            entries_per_batch_ = 1000;
+            method = &Benchmark::WriteSeq;
+          }},
+        { "fillrandom", [&] {
+            fresh_db = true;
+            method = &Benchmark::WriteRandom;
+          }},
+        { "overwrite", [&] {
+            fresh_db = false;
+            method = &Benchmark::WriteRandom;
+          }},
+        { "fillsync", [&] {
+            fresh_db = true;
+            num_ /= 1000;
+            write_options_.sync = true;
+            method = &Benchmark::WriteRandom;
+          }},
+        { "fill100K", [&] {
+            fresh_db = true;
+            num_ /= 1000;
+            value_size_ = 100 * 1000;
+            method = &Benchmark::WriteRandom;
+          }},
+        { "readseq", [&] { method = &Benchmark::ReadSequential; }},
+        { "readreverse", [&] { method = &Benchmark::ReadReverse; }},
+        { "readrandom", [&] { method = &Benchmark::ReadRandom; }},
+        { "readmissing", [&] { method = &Benchmark::ReadMissing; }},
+        { "seekrandom", [&] { method = &Benchmark::SeekRandom; }},
+        { "seekordered", [&] { method = &Benchmark::SeekOrdered; }},
+        { "readhot", [&] { method = &Benchmark::ReadHot; }},
+        { "readrandomsmall", [&] {
+            reads_ /= 1000;
+            method = &Benchmark::ReadRandom;
+          }},
+        { "deleteseq", [&] { method = &Benchmark::DeleteSeq; }},
+        { "deleterandom", [&] { method = &Benchmark::DeleteRandom; }},
+        { "readwhilewriting", [&] {
+            num_threads++; 
+            method = &Benchmark::ReadWhileWriting;
+          }},
+        { "compact", [&] { method = &Benchmark::Compact; }},
+        { "crc32c", [&] { method = &Benchmark::Crc32c; }},
+        { "snappycomp", [&] { method = &Benchmark::SnappyCompress; }},
+        { "snappyuncomp", [&] { method = &Benchmark::SnappyUncompress; }},
+        { "zstdcomp", [&] { method = &Benchmark::ZstdCompress; }},
+        { "zstduncomp", [&] { method = &Benchmark::ZstdUncompress; }},
+        { "heapprofile", [&] { HeapProfile(); }},
+        { "stats", [&] { PrintStats("leveldb.stats"); }},
+        { "sstables", [&] { PrintStats("leveldb.sstables"); }}
+      };
+    
+      auto it = benchmark_map.find(name.ToString());
+      if (it != benchmark_map.end()) {
+        it->second();
+      } else if (!name.empty()) {
+        std::fprintf(stderr, "unknown benchmark '%s'\n", name.ToString().c_str());
       }
-
+    }
       if (fresh_db) {
         if (FLAGS_use_existing_db) {
           std::fprintf(stdout, "%-12s : skipped (--use_existing_db is true)\n",
